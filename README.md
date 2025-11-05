@@ -6,6 +6,10 @@ This is sometext
 
 This is text.
 
+To run the codes do
+```
+python test.py
+```
 
 # ===============================================
 # Asteroid Hazard Assessment Dashboard
