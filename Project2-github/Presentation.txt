@@ -1,0 +1,142 @@
+Here is the 10-minute presentation script, updated to reflect your group's collective effort. It's designed for you to speak while demonstrating the program 
+and walking through the code, just as you requested.
+
+Good luck with your presentation!
+
+🚀 Presentation Summary: Live Demo & Code Walkthrough (Group Version)
+(Presenter's Script)
+
+Part 1: The Live Demonstration (Minutes 0:00 - 3:00)
+(Action: Open your terminal and run python Project2.py)
+
+"Good morning, everyone. Today we want to show you a project our group built to solve a problem with astronomical data. On average, a small asteroid passes 
+near Earth every day. But for most of us, this data is either sensationalized 'clickbait' or impossibly technical. Our goal was to build a tool that could 
+fetch real-time NASA data and make it understandable for everyone.
+
+As you can see, the first thing that happens is a loading window. This is a critical feature. Right now, the program is running on two threads: this loading 
+window on the main thread, and on a background thread, it's querying the NASA JPL API for 180 days of asteroid close-approach data. This takes about 10-20 
+seconds, and this window prevents the user from thinking the program has crashed."
+
+(Action: The main dashboard window opens. Maximize it.)
+
+"And here is the final dashboard. Let us walk you through it.
+
+First, on the left, we have a simple text panel. This is the 'context'—it explains the scientific criteria for what we're about to see. A 
+'Potentially Hazardous Asteroid' (PHA) isn't just any asteroid; it has to meet two criteria: a large size (an H-value of 22 or less) and a close approach 
+(within 0.05 AU, or 19.5 times the distance to the Moon).
+
+Next, we have three 2D scatter plots.
+
+This first plot shows Non-Hazardous asteroids. These are the 'routine passes' we mentioned.
+
+These next two plots are the ones we care about: the Top 25 Hazardous Asteroids approaching in the next 8-30 days, and...
+
+...the Top 25 Hazardous from 31 to 180 days out. The red dots clearly show the danger.
+
+Finally, we have this 3D map of the inner solar system. You can see the Sun at the center and the orbits of Mercury, Venus, Earth (in blue), and Mars.
+
+But the real power of this dashboard is the interactivity. This isn't just four static images. If we see an interesting asteroid—like this red one here, 
+'162882'—we can just... click on it."
+
+(Action: Click on an asteroid, preferably '162882' from Graph 3.)
+
+"Just like that. The program instantly made a new API call to NASA, fetched the full orbital data for '162882', calculated its 3D trajectory, and drew it 
+as a red-dashed line on the 3D map.
+
+Now we have context. We can rotate the 3D map and see exactly how this asteroid's orbit intersects with our own. This is the difference between a scary name 
+on a list and actual, visual understanding. And we can do this for any asteroid on any of these plots."
+
+Part 2: The Code Walkthrough (Minutes 3:00 - 9:00)
+(Action: Close the plot window. Open Project 2.py in your code editor.)
+
+"So, how does this all work? We're going to walk you through the five main 'chunks' of the code.
+
+Chunk 1: The 'Ingredients' (Setup & Config)
+
+(Action: Scroll to the top of the script.)
+
+"At the top, we have our 'Ingredients.' This is where we import our toolkits:
+
+requests is for networking with the NASA APIs.
+
+pandas is for cleaning and organizing all the data.
+
+matplotlib is what builds all the 2D and 3D plots.
+
+tkinter is what we used for that loading window.
+
+And finally, skyfield and numpy are our 'astrodynamics' modules. skyfield is a high-precision library that uses a special NASA file—de421.bsp—to know the 
+exact position of the planets in real-time.
+
+Chunk 2: The 'Engine Room' (Data Pipeline)
+
+(Action: Scroll to the run_data_pipeline function.)
+
+"This function is the 'engine' of the program. It's the part that runs on the background thread while the loading bar is up. It has four jobs:
+
+Fetch: It contacts the NASA API. As our changelogs show, we learned that asking for 180 days of data all at once would time out. So, we optimized this to 
+make six smaller, 30-day requests, which is much faster and more reliable.
+
+Clean: It merges those six chunks of data into one giant pandas DataFrame and cleans it up—converting text to numbers, dates to datetimes.
+
+Analyze: This is the science. This is where we add our is_hazardous column by checking if the asteroid's size and distance meet our criteria.
+
+Filter: Finally, it filters that huge list down into the three specific DataFrames we need for our plots.
+
+Chunk 3: The 'Space Math' (Astrodynamics)
+
+(Action: Scroll to the try_fetch_sbdb_elements function.)
+
+"This is the 'Space Math' module. This is the most complex part of the code, and it's what powers the click-to-plot feature. When a user clicks an asteroid, two 
+things happen.
+
+First, this function, try_fetch_sbdb_elements, runs. It takes the asteroid's name, like '162882', and makes a new API call to a different NASA database to get 
+its 6 'Keplerian Orbital Elements'—which is basically the 'address' for its orbit.
+
+And this is where we hit our biggest bug. As our changelogs show, the app kept crashing on certain asteroids. We discovered that for complex objects, the API 
+doesn't send a simple dictionary; it sends this very complex list of key-value pairs. Our code was trying to parse a dictionary and failing.
+
+The fix, which you can see right here, was to rewrite this function to be a robust parser. It now checks the data type, intelligently loops through that complex 
+list, and builds its own simple dictionary. This was the key bug fix that made the entire program work.
+
+(Action: Scroll to the orbital_elements_to_position_au function.)
+
+"Once it has that simple dictionary, it passes it to this function, which is the 'navigator.' It solves Kepler's Equation to turn those 6 'address' values 
+into 600 X, Y, and Z coordinates, which is the path we can actually draw.
+
+Chunk 4: The 'Grand Finale' (The Dashboard)
+
+(Action: Scroll to the create_and_show_plot function.)
+
+"This is the 'Grand Finale.' After the data pipeline is done, this function runs on the main thread. It takes those three clean DataFrames and builds the 
+dashboard we just saw.
+
+It uses GridSpec to create the complex layout—the 1-column text panel and the 2x2 plot grid.
+
+It draws the 3D solar system with the skyfield data for the planets.
+
+It sets picker=True on the 2D plots, which is what makes them 'clickable.'
+
+And right here, this one line—fig.canvas.mpl_connect—is the glue. It connects the 'pick_event' (the click) to our 'Space Math' function, on_pick.
+
+Chunk 5: The 'Main' Function (The Conductor)
+
+(Action: Scroll to the main function at the bottom.)
+
+"Finally, everything comes together in the main function. It's the 'conductor' that orchestrates the whole show.
+
+Part 1: It creates the loading window.
+
+Part 2: It starts the 'Engine Room' (run_data_pipeline) on the background thread.
+
+Part 3: It runs the loading window on the main thread, so it stays responsive.
+
+Part 4: Once the pipeline is done, it closes the loading window and calls the 'Grand Finale' (create_and_show_plot) to build and show the interactive dashboard.
+
+Part 3: Conclusion (Minute 9:00 - 10:00)
+(Action: Stop scrolling.)
+
+"So, in summary, by combining multi-threading for a good user experience, robust API fetching, and the 'space math' needed for 3D visualization, our group 
+built an end-to-end application. We've turned a wall of technical, intimidating NASA data into an accessible, interactive tool for visualizing actual risk.
+
+Thank you."

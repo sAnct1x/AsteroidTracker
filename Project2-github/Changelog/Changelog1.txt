@@ -1,0 +1,80 @@
+Summary of Changes
+Here is a separate list of all the major changes we made to get from the original broken script to the final version:
+
+Initial Error Fixing:
+
+We fixed the KeyError by moving the df['is_hazardous'] calculation to before any filtering happened.
+
+We fixed a logical gap where your code was skipping asteroids between 180 and 365 days. We standardized on a 6-month (180-day) total timeframe.
+
+API Request Strategy (Performance):
+
+We identified that making three redundant API calls (0-60, 0-180, 0-1825 days) was extremely slow.
+
+We changed this to one single request for 180 days.
+
+This also failed (due to server timeouts), so we found a hybrid solution: three separate, non-overlapping 60-day requests (0-60, 61-120, 121-180). This is fast, robust, and doesn't time out.
+
+Graph Definitions:
+
+We completely changed the four graphs to be more focused. We went from broad timeframes to this specific layout:
+
+Graph 1: Non-Hazardous (within 60 days, <10 LD)
+
+Graph 2: Top 25 Hazardous (Next 7 Days)
+
+Graph 3: Top 25 Hazardous (Days 8-30)
+
+Graph 4: Top 25 Hazardous (Days 31-180)
+
+GUI and Threading (The Biggest Change):
+
+To show a loading screen, we introduced tkinter and threading.
+
+This created a RuntimeError: main thread is not in main loop because matplotlib (which also uses tkinter) was being run in the background thread.
+
+We re-architected the code to fix this:
+
+run_data_pipeline (worker thread) now only fetches and processes data with Pandas.
+
+create_and_show_plot (main thread) now does all the matplotlib work after the loading window closes.
+
+We used a global variable (pipeline_results) to pass the data from the worker thread back to the main thread.
+
+Loading Screen Enhancements:
+
+We changed the "bouncing" indeterminate bar to a 0-100% determinate progress bar.
+
+We hooked this bar up to the new 3-part API request, so it updates realistically (10%, 20%, 30%, 40%, 70%, 100%).
+
+We made the status text more descriptive (e.g., "Fetching data (1/3)...").
+
+Aesthetics and Readability:
+
+Dark Mode: We added a full dark mode theme with a black background, dark gray plot backgrounds, and white text/axes.
+
+Scaling: We changed the X-axis from Lunar Distances (LD) to Astronomical Units (AU).
+
+Uniformity: We made Graphs 2, 3, and 4 share a uniform x-axis scale so you can visually compare their danger levels. Graph 1 remains dynamically scaled so it's readable.
+
+Dot Size: We increased the dot size by 20% to make them more visible.
+
+Labels: We simplified the Y-axis label to "Abs. Mag. (h)".
+
+Spacing: We fixed the main title and subplots overlapping by:
+
+Setting the main title's vertical position (y=0.99).
+
+Setting the plots' layout boundary (rect=[... 1, 0.95]).
+
+Adding significant height padding (h_pad=5.0) between the plot rows.
+
+Reducing the subplot title font size to 12.
+
+Bug Fixes:
+
+We fixed the maximize_figure_window function, which had a typo (get__current_fig_manager).
+
+We fixed the final NameError by correcting a variable name (on_complete_callback to on_pipeline_complete) when starting the thread.
+
+We removed unused imports (os, numpy).
