@@ -1,0 +1,383 @@
+================================================================================
+Asteroid Hazard Assessment Dashboard - How This Program Works Step by Step
+================================================================================
+
+OVERVIEW
+--------
+This program creates an interactive dashboard for visualizing near-Earth asteroid
+close approaches. It fetches real-time data from NASA's JPL APIs, processes it,
+and displays it in an interactive 3D solar system visualization.
+
+================================================================================
+PROGRAM EXECUTION FLOW
+================================================================================
+
+STEP 1: PROGRAM INITIALIZATION
+-------------------------------
+1.1. Script starts execution when user runs: python "Project 2.py"
+1.2. All required libraries are imported:
+    - requests: For API calls
+    - pandas: For data manipulation
+    - matplotlib: For plotting
+    - numpy: For numerical operations
+    - tkinter: For loading window GUI
+    - skyfield: For astronomical calculations
+
+1.3. Configuration constants are set:
+    - API endpoints (Close Approach Data API, Small-Body Database API)
+    - Output directory: "plots/"
+    - Cache directory: "cache/sbdb/"
+    - Retention days: 3 days for plots, 30 days for orbital element cache
+    - Scientific constants: AU to km, AU to lunar distances, PHA threshold (H ≤ 22.0)
+
+STEP 2: MAIN FUNCTION STARTS
+------------------------------
+2.1. main() function is called
+2.2. Creates a loading window using tkinter (create_loading_window())
+    - Centers the window on screen
+    - Displays a progress bar and status label
+    - Window is set to stay on top
+
+2.3. Defines a callback function (on_pipeline_complete) that will close the
+     loading window when data processing is complete
+
+STEP 3: DATA PIPELINE THREAD STARTS
+------------------------------------
+3.1. A separate worker thread is created to run the data pipeline
+    - This prevents the GUI from freezing during data fetching
+    - The main thread continues to update the loading window
+
+3.2. run_data_pipeline() function begins executing in the background thread
+
+STEP 4: DATA FETCHING (Part A of Pipeline)
+-------------------------------------------
+4.1. Creates an HTTP session with automatic retry logic (create_session_with_retries)
+    - Retries up to 3 times on server errors (429, 500, 502, 503, 504)
+    - Uses exponential backoff between retries
+
+4.2. Splits the 180-day query into 6 batches for better performance:
+    Batch 1: Days 0-15 (date-min: 'now', date-max: '+15')
+    Batch 2: Days 16-30
+    Batch 3: Days 31-45
+    Batch 4: Days 46-60
+    Batch 5: Days 61-120
+    Batch 6: Days 121-180
+
+4.3. For each batch:
+    a. Updates progress bar (10% + batch_number * 10%)
+    b. Updates status text showing which batch is being fetched
+    c. Makes API request to NASA JPL Close Approach Data API:
+       - Parameters: date range, max distance (0.5 AU), sort by distance
+       - Limit: 10,000 close approaches per batch
+       - Includes diameter data
+    d. Parses JSON response
+    e. Creates pandas DataFrame with the data
+    f. Adds DataFrame to collection
+
+4.4. After all 6 batches complete:
+    - Concatenates all DataFrames into one master DataFrame
+    - Prints total number of close approaches fetched
+
+STEP 5: DATA PARSING & CLEANING (Part B of Pipeline)
+------------------------------------------------------
+5.1. Progress bar updates to 70%
+
+5.2. Data type conversion:
+    - Converts numeric columns to proper types:
+      * dist, dist_min, dist_max: Distance values
+      * v_rel: Relative velocity
+      * h: Absolute magnitude
+      * diameter: Asteroid diameter
+
+5.3. Date parsing:
+    - Converts 'cd' (close approach date) column to datetime format
+    - Creates new column 'cd_datetime' for time-based filtering
+
+5.4. Data cleaning:
+    - Removes rows with missing essential data (dist, h, cd_datetime)
+    - Filters out incomplete records
+
+STEP 6: DATA ANALYSIS & CLASSIFICATION (Part C of Pipeline)
+-------------------------------------------------------------
+6.1. Progress bar updates to 90%
+
+6.2. Calculates derived metrics:
+    - dist_km: Distance in kilometers (dist * AU_TO_KM)
+    - dist_lunar: Distance in lunar distances (dist * AU_TO_LD)
+    - is_hazardous: Boolean flag indicating PHA status
+      * PHA criteria: (distance ≤ 0.05 AU) AND (absolute magnitude H ≤ 22.0)
+
+6.3. Defines time windows:
+    - now: Current time
+    - plus_7_days: 7 days from now (used as start for 30-day window)
+    - plus_30_days: 30 days from now
+    - plus_60_days: 60 days from now
+    - plus_6_months: 180 days from now
+
+6.4. Creates three filtered datasets:
+
+    Dataset 1: df_non_hazardous_close
+    - Non-hazardous asteroids
+    - Within 60 days
+    - Within 10 lunar distances (NON_HAZ_CLOSE_AU)
+    - Used for top-left plot
+
+    Dataset 2: df_haz_30_days
+    - Potentially hazardous asteroids (PHAs)
+    - Between 8-30 days out
+    - Sorted by lunar distance
+    - Top 25 closest
+    - Used for top-right plot
+
+    Dataset 3: df_haz_6_months
+    - Potentially hazardous asteroids (PHAs)
+    - Between 31-180 days out
+    - Sorted by lunar distance
+    - Top 25 closest
+    - Used for bottom-left plot
+
+STEP 7: DATA PIPELINE COMPLETION
+---------------------------------
+7.1. Stores results in global variable: pipeline_results
+    - Contains tuple: (df_non_hazardous_close, df_haz_30_days, df_haz_6_months)
+
+7.2. Progress bar updates to 100%
+7.3. Calls on_pipeline_complete() callback
+7.4. Loading window closes after 100ms delay
+
+STEP 8: VISUALIZATION CREATION (Main Thread)
+--------------------------------------------
+8.1. Checks if pipeline_results exists
+8.2. Calls create_and_show_plot() with the three datasets
+
+STEP 9: PLOT SETUP
+------------------
+9.1. Creates a large figure (19.2 x 12.8 inches) with black background
+9.2. Uses matplotlib GridSpec to create a 2x3 grid layout:
+    - Left column (narrower): Text information panel
+    - Right columns: Four plot panels
+
+9.3. Creates five axes:
+    - ax_text: Left panel for documentation
+    - axes_list[0]: Top-left scatter plot
+    - axes_list[1]: Top-right scatter plot
+    - axes_list[2]: Bottom-left scatter plot
+    - axes_list[3]: Bottom-right 3D solar system map
+
+STEP 10: TEXT PANEL CONFIGURATION
+----------------------------------
+10.1. Sets background to black
+10.2. Hides axis borders and labels
+10.3. Displays informational text:
+     - About the data
+     - Data source (NASA JPL SBDB Close Approach API)
+     - PHA criteria explanation
+     - Instructions for 3D map interaction
+
+STEP 11: 2D SCATTER PLOTS CREATION
+-----------------------------------
+11.1. For each of the three datasets:
+     a. Determines color scheme:
+        - Red for hazardous asteroids
+        - Gray for non-hazardous asteroids
+     
+     b. Calculates appropriate x-axis limits
+     
+     c. Creates scatter plot:
+        - X-axis: Approach Distance (AU)
+        - Y-axis: Absolute Magnitude (H)
+        - Point size: Inversely proportional to H value
+        - Enables picker for click interaction
+     
+     d. Adds labels for asteroids very close to Earth (within 1/4 of x-axis max)
+     
+     e. Configures plot appearance:
+        - Dark background (#1C1C1C)
+        - White text and labels
+        - Gray grid lines
+        - Inverted y-axis (brighter magnitudes at top)
+        - Legend with appropriate color
+     
+     f. Stores metadata for click handling:
+        - Links axes, scatter collection, and DataFrame together
+
+STEP 12: 3D SOLAR SYSTEM MAP CREATION
+--------------------------------------
+12.1. Sets up 3D plot with black background
+12.2. Places Sun at origin (0, 0, 0) as orange point
+
+12.3. Draws asteroid belt region:
+     - Subtle red band between 2.2-3.2 AU
+     - Represented as a semi-transparent surface
+
+12.4. For each inner planet (Mercury, Venus, Earth, Mars):
+     a. Gets orbital elements from build_planet_catalog()
+     b. Calculates log-scaled size for visualization
+     c. Generates orbit curve:
+        - Creates 800 points along full orbit
+        - Converts Keplerian elements to Cartesian coordinates
+          using orbital_elements_to_position_au()
+        - Draws orbit as yellow curve
+     
+     d. Gets current planet position:
+        - Tries Skyfield library first (most accurate)
+        - Falls back to orbital elements if Skyfield unavailable
+     
+     e. Draws planet:
+        - Colored point at current position
+        - Size based on log-scaled radius
+        - Unique color per planet (silver, green, blue, red)
+     
+     f. Draws direction arrow:
+        - Yellow arrow showing orbital direction
+        - Small segment tangent to orbit
+
+12.5. Sets 3D plot limits:
+     - X and Y: -2.2 to +2.2 AU (to asteroid belt)
+     - Z: -0.44 to +0.44 AU (compressed for better viewing)
+
+STEP 13: INTERACTIVE CLICK HANDLER SETUP
+-----------------------------------------
+13.1. Creates placeholder for selected asteroid orbit (selected_orbit_line)
+13.2. Registers pick_event handler with matplotlib canvas
+13.3. When user clicks an asteroid point:
+     a. Identifies which plot and which asteroid was clicked
+     b. Gets asteroid designation (name) from DataFrame
+     c. Fetches orbital elements:
+        - Checks cache first (cache/sbdb/{designation}.json)
+        - If cache miss or expired (>30 days), queries NASA SBDB API
+        - Parses API response to extract orbital elements:
+          * a: Semi-major axis
+          * e: Eccentricity
+          * i: Inclination
+          * om: Longitude of ascending node
+          * w: Argument of periapsis
+          * ma: Mean anomaly
+          * n: Mean motion (optional)
+          * epoch: Epoch date (optional)
+        - Saves to cache if fetched from API
+     
+     d. Adjusts mean anomaly to current epoch (if n and epoch available)
+     
+     e. Generates orbit curve:
+        - Creates 600 points along full orbit
+        - Converts orbital elements to 3D positions
+        - Uses Kepler's equation solver (Newton-Raphson method)
+        - Applies 3D rotation matrices to transform from orbital plane
+          to ecliptic reference frame
+     
+     f. Draws orbit on 3D map:
+        - Removes previous orbit if one exists
+        - Draws new orbit as red dashed line
+        - Adds 10 directional arrows along the orbit
+        - Adjusts 3D view limits to fit the orbit (if needed)
+     
+     g. Redraws the plot
+
+STEP 14: PLOT SAVING
+--------------------
+14.1. Creates 'plots/' directory if it doesn't exist
+14.2. Generates timestamp string (YYYYMMDD_HHMMSS)
+14.3. Saves plot as PNG file:
+     - Filename: asteroid_close_approaches_{timestamp}.png
+     - DPI: 200 (high resolution)
+     - Black background
+     - Tight bounding box
+
+14.4. Cleans up old plot files:
+     - Removes PNG files older than 3 days from plots/ directory
+
+STEP 15: PLOT DISPLAY
+---------------------
+15.1. Attempts to maximize the plot window:
+     - Tries different methods for different GUI backends:
+       * TkAgg (Windows): window.state('zoomed')
+       * Qt: window.showMaximized()
+       * wx: frame.Maximize(True)
+     - Gracefully handles failures
+
+15.2. Displays the interactive plot using plt.show()
+     - Program remains running until user closes the window
+
+STEP 16: USER INTERACTION
+-------------------------
+16.1. User can interact with the plot:
+     - Click asteroids in 2D plots to see orbits in 3D
+     - Use matplotlib toolbar:
+       * Zoom in/out
+       * Pan around
+       * Reset view
+       * Save plot
+     - Rotate 3D view (if supported by backend)
+
+16.2. Each click on an asteroid:
+     - Triggers API call (or cache lookup) for orbital elements
+     - Dynamically updates 3D visualization
+     - Provides real-time feedback
+
+================================================================================
+KEY TECHNICAL DETAILS
+================================================================================
+
+ORBITAL MECHANICS CALCULATIONS
+-------------------------------
+- Uses Keplerian orbital elements (6 parameters) to describe orbits
+- Converts to Cartesian coordinates (x, y, z) for 3D plotting
+- Solves Kepler's equation: M = E - e*sin(E) using Newton-Raphson iteration
+- Applies 3D rotation matrices to transform from orbital plane to ecliptic frame
+- Rotation: R = Rz(Ω) * Rx(i) * Rz(ω)
+  Where: Ω = longitude of ascending node
+         i = inclination
+         ω = argument of periapsis
+
+THREADING MODEL
+---------------
+- Main thread: Handles GUI (loading window, plot display)
+- Worker thread: Fetches and processes data
+- Thread-safe communication: Uses tkinter's after() method for GUI updates
+- Global variable: pipeline_results stores processed data
+
+CACHING STRATEGY
+----------------
+- Orbital elements cached for 30 days (rarely change)
+- Cache location: cache/sbdb/{asteroid_designation}.json
+- Plot files retained for 3 days
+- Automatic cleanup prevents disk bloat
+
+API USAGE
+---------
+- Close Approach Data API: Fetches close approach information
+- Small-Body Database API: Fetches detailed orbital elements
+- Both APIs from NASA JPL: https://ssd-api.jpl.nasa.gov/
+- Automatic retry logic handles transient network failures
+
+DATA FILTERING LOGIC
+--------------------
+- PHA classification: (distance ≤ 0.05 AU) AND (H ≤ 22.0)
+- Time-based filtering separates data into different visualization windows
+- Distance-based filtering shows most relevant close approaches
+- Top 25 selection ensures manageable visualization size
+
+================================================================================
+PROGRAM OUTPUT
+================================================================================
+
+1. Interactive matplotlib window with:
+   - Three 2D scatter plots (different time windows)
+   - One 3D solar system visualization
+   - One text information panel
+
+2. Saved PNG file in plots/ directory:
+   - High-resolution snapshot of the dashboard
+   - Timestamped filename
+   - Auto-cleaned after 3 days
+
+3. Cache files in cache/sbdb/ directory:
+   - JSON files with orbital elements
+   - One file per asteroid designation
+   - Auto-expires after 30 days
+
+================================================================================
+END OF DOCUMENT
+================================================================================
+
